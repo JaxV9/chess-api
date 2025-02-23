@@ -1,5 +1,7 @@
 from .model import ChessPiece
 
+
+
 data = [
     ChessPiece("pawn_b1", "pawn_black", "black", 9),
     ChessPiece("pawn_b2", "pawn_black", "black", 10),
