@@ -1,5 +1,4 @@
-from .model import ChessPiece
-
+from ..schema.schema import ChessPiece
 
 
 data = [
