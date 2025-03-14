@@ -1,12 +1,20 @@
-from .constant import data
+from .constant.constant import data
 from fastapi.encoders import jsonable_encoder
 import json
-from .model import ChessAction
-
-from fastapi import FastAPI, WebSocket
+from .schema.schema import ChessAction, UserSchema
+from typing import List
+from sqlalchemy.orm import Session
+from fastapi import FastAPI, WebSocket, Depends
+from .database.database import get_db
+from .model.model import User
 
 app = FastAPI()
 active_connections = set()
+
+@app.get("/users/", response_model=List[UserSchema])
+def read_users(db: Session = Depends(get_db)):  
+    users = db.query(User).all()  # Récupérer tous les utilisateurs
+    return users
 
 @app.websocket("/ws/chess")
 async def websocket_endpoint(websocket: WebSocket):
@@ -31,7 +39,6 @@ async def websocket_endpoint(websocket: WebSocket):
                             break
 
                 # Send updated data to all clients
-                response = {"response": "updated", "data": data}
                 for connection in active_connections:
                     await connection.send_text(json.dumps(jsonable_encoder(response)))
 
