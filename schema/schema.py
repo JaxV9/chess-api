@@ -24,7 +24,6 @@ class UserSchema(BaseModel):
     class Config:
         orm_mode = True
 
-
 class UserBaseSubscription(UserSchema):
     password: str
 
@@ -46,6 +45,25 @@ class GameSessionBase(BaseModel):
     created_at: datetime
     player_1: Optional[UUID4]
     player_2: Optional[UUID4]
+    data: dict
+
+    class Config:
+        orm_mode = True
+
+
+class GuestSchema(BaseModel):
+    id: UUID4
+    username: str
+
+    class Config:
+        orm_mode = True
+
+
+class OfflineGameSessionBase(BaseModel):
+    id: int
+    created_at: datetime
+    guest_1: Optional[UUID4]
+    guest_2: Optional[UUID4]
     data: dict
 
     class Config:
