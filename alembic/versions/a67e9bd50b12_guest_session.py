@@ -1,8 +1,8 @@
-"""initial migration
+"""guest session
 
-Revision ID: 5e0d56cd5f12
+Revision ID: a67e9bd50b12
 Revises: 
-Create Date: 2025-03-14 15:57:15.144693
+Create Date: 2025-03-15 11:48:57.616726
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '5e0d56cd5f12'
+revision: str = 'a67e9bd50b12'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,6 +31,25 @@ def upgrade() -> None:
     op.create_index(op.f('ix_game_session_created_at'), 'game_session', ['created_at'], unique=False)
     op.create_index(op.f('ix_game_session_id'), 'game_session', ['id'], unique=False)
     op.create_index(op.f('ix_game_session_time'), 'game_session', ['time'], unique=False)
+    op.create_table('guest',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_guest_created_at'), 'guest', ['created_at'], unique=False)
+    op.create_index(op.f('ix_guest_id'), 'guest', ['id'], unique=True)
+    op.create_index(op.f('ix_guest_username'), 'guest', ['username'], unique=True)
+    op.create_table('offline_game_session',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('data', sa.JSON(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('time', sa.TIMESTAMP(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_offline_game_session_created_at'), 'offline_game_session', ['created_at'], unique=False)
+    op.create_index(op.f('ix_offline_game_session_id'), 'offline_game_session', ['id'], unique=False)
+    op.create_index(op.f('ix_offline_game_session_time'), 'offline_game_session', ['time'], unique=False)
     op.create_table('user',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('email', sa.String(), nullable=False),
@@ -43,6 +62,25 @@ def upgrade() -> None:
     op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
     op.create_index(op.f('ix_user_id'), 'user', ['id'], unique=True)
     op.create_index(op.f('ix_user_username'), 'user', ['username'], unique=True)
+    op.create_table('gest_session',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('value', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('guest_id', sa.UUID(), nullable=False),
+    sa.ForeignKeyConstraint(['guest_id'], ['guest.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('guest_id')
+    )
+    op.create_index(op.f('ix_gest_session_created_at'), 'gest_session', ['created_at'], unique=False)
+    op.create_index(op.f('ix_gest_session_id'), 'gest_session', ['id'], unique=False)
+    op.create_index(op.f('ix_gest_session_value'), 'gest_session', ['value'], unique=True)
+    op.create_table('guest_game_session',
+    sa.Column('guest_id', sa.UUID(), nullable=False),
+    sa.Column('offline_game_session_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['guest_id'], ['guest.id'], ),
+    sa.ForeignKeyConstraint(['offline_game_session_id'], ['offline_game_session.id'], ),
+    sa.PrimaryKeyConstraint('guest_id', 'offline_game_session_id')
+    )
     op.create_table('statistic',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('win', sa.Integer(), nullable=False),
@@ -72,11 +110,24 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_statistic_loss'), table_name='statistic')
     op.drop_index(op.f('ix_statistic_id'), table_name='statistic')
     op.drop_table('statistic')
+    op.drop_table('guest_game_session')
+    op.drop_index(op.f('ix_gest_session_value'), table_name='gest_session')
+    op.drop_index(op.f('ix_gest_session_id'), table_name='gest_session')
+    op.drop_index(op.f('ix_gest_session_created_at'), table_name='gest_session')
+    op.drop_table('gest_session')
     op.drop_index(op.f('ix_user_username'), table_name='user')
     op.drop_index(op.f('ix_user_id'), table_name='user')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_index(op.f('ix_user_created_at'), table_name='user')
     op.drop_table('user')
+    op.drop_index(op.f('ix_offline_game_session_time'), table_name='offline_game_session')
+    op.drop_index(op.f('ix_offline_game_session_id'), table_name='offline_game_session')
+    op.drop_index(op.f('ix_offline_game_session_created_at'), table_name='offline_game_session')
+    op.drop_table('offline_game_session')
+    op.drop_index(op.f('ix_guest_username'), table_name='guest')
+    op.drop_index(op.f('ix_guest_id'), table_name='guest')
+    op.drop_index(op.f('ix_guest_created_at'), table_name='guest')
+    op.drop_table('guest')
     op.drop_index(op.f('ix_game_session_time'), table_name='game_session')
     op.drop_index(op.f('ix_game_session_id'), table_name='game_session')
     op.drop_index(op.f('ix_game_session_created_at'), table_name='game_session')
