@@ -1,20 +1,43 @@
 from .constant.constant import data
 from fastapi.encoders import jsonable_encoder
-import json
-from .schema.schema import ChessAction, UserSchema
+import json, uuid
 from typing import List
 from sqlalchemy.orm import Session
-from fastapi import FastAPI, WebSocket, Depends
+from fastapi import FastAPI, WebSocket, Depends, Response
 from .database.database import get_db
-from .model.model import User
+from .utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
+from .schema.schema import ChessAction, UserSchema, GuestSchema
+from .model.model import User, Guest, GuestSession
 
 app = FastAPI()
 active_connections = set()
 
+#get all the users
 @app.get("/users/", response_model=List[UserSchema])
 def read_users(db: Session = Depends(get_db)):  
     users = db.query(User).all()  # Récupérer tous les utilisateurs
     return users
+
+#create a new guest player
+@app.post("/guest/", response_model=GuestSchema)
+def create_guest(response: Response, db: Session = Depends(get_db)):
+    #creation of a guest
+    guest = Guest(
+        id=uuid.uuid4(),
+        username=gen.guest_name()
+    )
+    dbQuick.add_object_in_db(db, guest)
+
+    #Save the temp session of the guest and send a cookie
+    sessionId = gen.guest_session_id()
+    guestSession = GuestSession(
+        value=sessionId,
+        guest_id=guest.id
+    )
+    dbQuick.add_object_in_db(db, guestSession)
+    cook.send_cookie_for_guest(response,sessionId)
+
+    return guest
 
 @app.websocket("/ws/chess")
 async def websocket_endpoint(websocket: WebSocket):
