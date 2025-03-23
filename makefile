@@ -7,8 +7,30 @@ install:
 clean:
 	rm -rf __pycache__ .pytest_cache
 
+cv:
+	rm -f alembic/versions/*.py
+	rm -rf alembic/versions/__pycache__/*.pyc
 
 migrate:
 	@read -p "Message: " msg; \
 	alembic revision --autogenerate -m "$$msg"
 	alembic upgrade head
+
+c:
+	@read -p "Commit: " msg; \
+	git commit -m "$$msg"
+
+p:
+	git push
+
+pl:
+	git pull
+
+main:
+	git checkout main
+
+s:
+	git stash
+
+sp:
+	git stash pop
