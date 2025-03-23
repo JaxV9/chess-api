@@ -2,7 +2,7 @@ import random
 import string
 from sqlalchemy.orm import Session
 from fastapi import Response
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 import uuid
 
 class Generator:
@@ -29,13 +29,16 @@ class DbQuickActions:
 
 class Cookie:
 
-    def send_cookie_for_guest(response:Response,value: str) -> None:
+    @staticmethod
+    def send_cookie_for_guest(response: Response, key: str, value: str) -> None:
+        expire_time = datetime.now(timezone.utc) + timedelta(hours=1)
         response.set_cookie(
-        key="guest_session",
-        value=value,
-        max_age=timedelta(hours=1),
-        expires=timedelta(hours=1),
-        #secure=True,                 # Unique access with  https
-        #httponly=True,               # Don't be accessible with js
-        #samesite="Strict"            # Cookie send only for a specific domain
-    )
+            key=key,
+            value=value,
+            max_age=3600,  # en secondes
+            expires=expire_time,
+            secure=True,  # False pour le développement local
+            httponly=True,  # Recommandé pour des raisons de sécurité
+            samesite="none",  # Essayez "none" pour le développement local
+            path="/",  # Assurez-vous que le cookie est envoyé pour le bon chemin
+        )
