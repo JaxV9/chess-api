@@ -65,12 +65,16 @@ class GameSession(Base):
 
 
 #-----------------Start of: models for guest players-----------------#
-guest_game_session = Table(
-    "guest_game_session",
-    Base.metadata,
-    Column("guest_id", UUID, ForeignKey("guest.id"), primary_key=True),
-    Column("offline_game_session_id", Integer, ForeignKey("offline_game_session.id"), primary_key=True)
-)
+class GuestsGameOfflineSession(Base):
+    __tablename__ = "guests_game_offline_session"
+
+    guest_id = Column(UUID, ForeignKey("guest.id"), primary_key=True, unique=True)
+    offline_game_session_id = Column(UUID, ForeignKey("offline_game_session.id"), primary_key=True)
+
+    # Optionnel : Ajouter une relation avec les modèles Guest et OfflineGameSession
+    guest = relationship("Guest", back_populates="guests_game_offline_sessions")
+    offline_game_session = relationship("OfflineGameSession", back_populates="guests_game_offline_sessions")
+
 
 class Guest(Base):
     __tablename__ = "guest"
@@ -78,11 +82,11 @@ class Guest(Base):
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True, unique=True)
     username: Mapped[str] = mapped_column(String, index=True, unique=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), index=True, server_default=func.now())
-
-    offline_game_session: Mapped[Optional["OfflineGameSession"]] = relationship(
-        "OfflineGameSession", secondary=guest_game_session, back_populates="guests", uselist=False
-    )
     gest_session: Mapped[Optional["GuestSession"]] = relationship("GuestSession", back_populates="guest", uselist=False)
+    
+    offline_game_sessions: Mapped[Optional["OfflineGameSession"]] = relationship(
+        "OfflineGameSession", secondary=GuestsGameOfflineSession.__table__, back_populates="guests")
+    guests_game_offline_sessions: Mapped[Optional["GuestsGameOfflineSession"]] = relationship("GuestsGameOfflineSession", back_populates="guest", uselist=False)
 
 
 class GuestSession(Base):
@@ -99,15 +103,16 @@ class OfflineGameSession(Base):
 
     __tablename__ = "offline_game_session"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True, unique=True)
     data: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[DateTime] = mapped_column(DateTime, index=True, server_default=func.now())
     time: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, index=True, nullable=True)
 
     guests: Mapped[List["Guest"]] = relationship(
-        "Guest", secondary=guest_game_session, back_populates="offline_game_session"
+        "Guest", secondary=GuestsGameOfflineSession.__table__, back_populates="offline_game_sessions"
     )
+    guests_game_offline_sessions: Mapped[List["GuestsGameOfflineSession"]] = relationship("GuestsGameOfflineSession", back_populates="offline_game_session")
 
     def __repr__(self):
-        return f"id: {self.id} data: {self.data} parents: {self.guests}"
+        return f"id: {self.id} data: {self.data} parents: {self.guest}"
 #-----------------End of: models for guest players-----------------#
