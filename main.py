@@ -10,7 +10,7 @@ from .utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as 
 from .schema.schema import ChessAction, UserSchema, GuestSchema
 from .model.model import User, Guest, GuestSession, OfflineGameSession, GuestsGameOfflineSession
 import asyncio
-from mangum import Mangum
+import uvicorn
 import os
 
 origins = [os.getenv("BASE_URL")]
@@ -168,5 +168,3 @@ async def websocket_endpoint(websocket: WebSocket , gameSessionId: str, db: Sess
         active_connections.remove(websocket)
     except Exception as e:
         print(f"Client disconnected: {e}")
-
-handler = Mangum(app)
