@@ -1,14 +1,14 @@
-from .constant.constant import data
+from constant.constant import data
 from fastapi.encoders import jsonable_encoder
 import json, uuid
 from typing import List
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, WebSocket, Depends, Response, HTTPException, Request, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from .database.database import get_db
-from .utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
-from .schema.schema import ChessAction, UserSchema, GuestSchema
-from .model.model import User, Guest, GuestSession, OfflineGameSession, GuestsGameOfflineSession
+from database.database import get_db
+from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
+from schema.schema import ChessAction, UserSchema, GuestSchema
+from model.model import User, Guest, GuestSession, OfflineGameSession, GuestsGameOfflineSession
 import asyncio
 import uvicorn
 import os
