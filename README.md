@@ -1,13 +1,16 @@
 # chess-api
 
 ## Status of the project
+
 Work in progress...
 
 ## Description of the project
+
 This project is the back-end of https://chess-bay-nu.vercel.app/
 It allows to play with players around the world in multiplayer games.
 
 ## Architecture
+
 ```
 .
 ├── alembic     //here you have all the configs about db migrations
@@ -49,3 +52,7 @@ It allows to play with players around the world in multiplayer games.
 │   ├── __pycache__
 │   └── utils.py
 ```
+
+## Workflow — Retrieving Chess Pieces Position
+
+![alt text](workflow.png)
