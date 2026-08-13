@@ -65,14 +65,16 @@ async def create_offline_game_session(request: Request, db: AsyncSession = Depen
     if not guestId:
         raise HTTPException(status_code=400)
     
-    #Creation of a game
+    #Creation of a game — capture id before commit expires ORM attributes
+    session_id = uuid.uuid4()
     offlineGameSession = OfflineGameSession(
+        id=session_id,
         data=jsonable_encoder(data)
     )
     await dbQuick.add_object_in_db(db, offlineGameSession)
 
     #id used to create a link to share with an other player
-    return {"game_session": offlineGameSession.id}
+    return {"game_session": session_id}
 
 
 #join a game session as a invited player
