@@ -1,39 +1,31 @@
-from sqlalchemy import create_engine, NullPool
-from sqlalchemy.orm import declarative_base, sessionmaker
-# from sqlalchemy.pool import NullPool
-from dotenv import load_dotenv
 import os
+import re
+from sqlalchemy import text
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from dotenv import load_dotenv
 
-# Load environment variables from .env
 load_dotenv()
 
-# Fetch variables
-USER = os.getenv("USER_SB")
-PASSWORD = os.getenv("DATABASE_PASSWORD_CHESS")
-HOST = os.getenv("HOST")
-PORT = int(os.getenv("PORT"))
-DBNAME = os.getenv("DBNAME")
+# Replace postgresql: with postgresql+psycopg: for async driver compatibility (required by Neon)
+DATABASE_URL = re.sub(r'^postgresql:', 'postgresql+psycopg:', os.getenv('DATABASE_URL'))
 
-# Construct the SQLAlchemy connection string
-DATABASE_URL = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require"
+# Create the async engine
+engine = create_async_engine(DATABASE_URL, echo=True)
 
-# Create the SQLAlchemy engine
-# engine = create_engine(DATABASE_URL)
-# If using Transaction Pooler or Session Pooler, we want to ensure we disable SQLAlchemy client side pooling -
-# https://docs.sqlalchemy.org/en/20/core/pooling.html#switching-pool-implementations
-engine = create_engine(DATABASE_URL, poolclass=NullPool)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Async session factory
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    autocommit=False,
+    autoflush=False,
+)
 
-# Test the connection
-try:
-    with engine.connect() as connection:
-        print("Connection successful!")
-except Exception as e:
-    print(f"Failed to connect: {e}")
+Base = declarative_base()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

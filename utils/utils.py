@@ -35,10 +35,10 @@ class Cookie:
         response.set_cookie(
             key=key,
             value=value,
-            max_age=3600,  # en secondes
+            max_age=3600,  # in seconds
             expires=expire_time,
-            secure=True,  # False pour le développement local
-            httponly=True,  # Recommandé pour des raisons de sécurité
-            samesite="none",  # Essayez "none" pour le développement local
-            path="/",  # Assurez-vous que le cookie est envoyé pour le bon chemin
+            secure=False,
+            httponly=True,
+            samesite="lax",  
+            path="/", 
         )
