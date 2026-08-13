@@ -10,7 +10,6 @@ from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as c
 from schema.schema import ChessAction, UserSchema, GuestSchema
 from model.model import User, Guest, GuestSession, OfflineGameSession, GuestsGameOfflineSession
 import asyncio
-import uvicorn
 import os
 
 origins = [os.getenv("BASE_URL")]
