@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database.database import get_db
 from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
 from schema.schema import ChessAction, UserSchema, GuestSchema
-from model.model import User, Guest, GuestSession, OfflineGameSession, GuestsGameOfflineSession
+from model.model import User, Guest, GuestSession, GameSession
 import asyncio
 import os
 
@@ -58,27 +58,34 @@ async def create_guest(response: Response, db: AsyncSession = Depends(get_db)):
 
 
 #create a game session with a shared link
-@app.post("/guest/gamesession")
-async def create_offline_game_session(request: Request, db: AsyncSession = Depends(get_db)):
-    #check if the player is a guest
+@app.post("/gamesession")
+async def create_game_session(request: Request, db: AsyncSession = Depends(get_db)):
+    #check if the player is a guest or a logged user
     guestId = request.cookies.get('guest_id')
-    if not guestId:
-        raise HTTPException(status_code=400)
-    
-    #Creation of a game — capture id before commit expires ORM attributes
-    session_id = uuid.uuid4()
-    offlineGameSession = OfflineGameSession(
-        id=session_id,
-        data=jsonable_encoder(data)
-    )
-    await dbQuick.add_object_in_db(db, offlineGameSession)
+    userId = request.cookies.get('user_id')
+
+    if not guestId and not userId:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # create game session object in ram memory
+    game_session = GameSession(data=jsonable_encoder(data))
+
+    if guestId:
+        guest = await db.get(Guest, uuid.UUID(guestId))
+        game_session.guests.append(guest)
+
+    if userId:
+        user = await db.get(User, uuid.UUID(userId))
+        game_session.users.append(user)
+
+    await dbQuick.add_object_in_db(db, game_session)
 
     #id used to create a link to share with an other player
-    return {"game_session": session_id}
+    return {"game_session": game_session.id}
 
 
 #join a game session as a invited player
-@app.post("/guest/gamesession/join/{gameSessionId}")
+@app.post("/gamesession/join/{gameSessionId}")
 async def join_offline_game_session(request: Request, gameSessionId: str, db: AsyncSession = Depends(get_db)):
 
     #check if the player is a guest
