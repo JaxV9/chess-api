@@ -1,6 +1,6 @@
 import random
 import string
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Response
 from datetime import timedelta, datetime, timezone
 import uuid
@@ -21,10 +21,10 @@ class Generator:
 
 class DbQuickActions:
 
-    def add_object_in_db(db: Session, data: object) -> None:
-        db.add(data)  # Add object into the session
-        db.commit()  # Save data in database
-        db.refresh(data) #Refresh database to see the result
+    async def add_object_in_db(db: AsyncSession, data: object) -> None:
+        db.add(data)          # Add object into the session
+        await db.commit()     # Save data in database
+        await db.refresh(data) # Refresh database to see the result
 
 
 class Cookie:
@@ -39,6 +39,6 @@ class Cookie:
             expires=expire_time,
             secure=False,
             httponly=True,
-            samesite="lax",  
+            samesite="lax",  # "None" requires secure=True (HTTPS) — use lax for local dev
             path="/", 
         )
