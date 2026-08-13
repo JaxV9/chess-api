@@ -20,9 +20,9 @@ migrate:
 	alembic upgrade head
 
 dbreset:
+	alembic stamp --purge base
 	@read -p "Message: " msg; \
 	alembic revision --autogenerate -m "$$msg"
-	alembic downgrade base
 	alembic upgrade head
 
 c:
