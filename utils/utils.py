@@ -20,11 +20,17 @@ class Generator:
         return uuid.uuid4()
 
 class DbQuickActions:
-
+    
+    @staticmethod
     async def add_object_in_db(db: AsyncSession, data: object) -> None:
         db.add(data)          # Add object into the session
         await db.commit()     # Save data in database
         await db.refresh(data) # Refresh database to see the result
+
+    @staticmethod
+    async def delete_object_in_db(db: AsyncSession, data: object) -> None:
+        await db.delete(data) # Remove object into the session
+        await db.commit()     # Save data in database
 
 
 class Cookie:

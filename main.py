@@ -70,6 +70,25 @@ async def get_guest(request: Request, db: AsyncSession = Depends(get_db)):
 
     return guest
     
+@app.post("/guest/disconnect")
+async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    guestId = request.cookies.get('guest_id')
+    guestSessionValue = request.cookies.get('guest_session')
+
+    if guestId:
+        guest = await db.get(Guest, uuid.UUID(guestId))
+        if guest:
+            await dbQuick.delete_object_in_db(db, guest)
+    
+    if guestSessionValue:
+        guestSession = await db.scalar(select(GuestSession).where(GuestSession.value == uuid.UUID(guestSessionValue)))
+        if guestSession:
+            await dbQuick.delete_object_in_db(db, guestSession)
+
+    response.delete_cookie(key="guest_session", path="/")
+    response.delete_cookie(key="guest_id", path="/")
+
+    return {"status": "ok"}
 
 #create a game session with a shared link
 @app.post("/gamesession")
