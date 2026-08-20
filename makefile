@@ -1,8 +1,10 @@
+VENV = venv/bin
+
 run:
 	fastapi dev main.py
 
 test:
-	pytest test_main.py
+	$(VENV)/pytest test_main.py
 
 install:
 	pip install -r requirements.txt
@@ -16,14 +18,15 @@ cv:
 
 migrate:
 	@read -p "Message: " msg; \
-	alembic revision --autogenerate -m "$$msg"
-	alembic upgrade head
+	$(VENV)/alembic revision --autogenerate -m "$$msg"
+	$(VENV)/alembic upgrade head
 
 dbreset:
-	alembic stamp --purge base
+	PYTHONPATH=. $(VENV)/python3 scripts/dbreset.py
+	$(VENV)/alembic stamp --purge base
 	@read -p "Message: " msg; \
-	alembic revision --autogenerate -m "$$msg"
-	alembic upgrade head
+	$(VENV)/alembic revision --autogenerate -m "$$msg"
+	$(VENV)/alembic upgrade head
 
 c:
 	@read -p "Commit: " msg; \
