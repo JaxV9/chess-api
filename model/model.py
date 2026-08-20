@@ -46,7 +46,7 @@ class Guest(Base):
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True, unique=True)
     username: Mapped[str] = mapped_column(String, index=True, unique=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, default=func.now(), index=True, server_default=func.now())
-    gest_session: Mapped[Optional["GuestSession"]] = relationship("GuestSession", back_populates="guest", uselist=False)
+    gest_session: Mapped[Optional["GuestSession"]] = relationship("GuestSession", back_populates="guest", uselist=False, cascade="all, delete-orphan")
 
     game_sessions: Mapped[List["GameSession"]] = relationship(
         "GameSession", secondary="guest_game_session", back_populates="guests"

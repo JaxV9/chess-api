@@ -75,15 +75,17 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
     guestId = request.cookies.get('guest_id')
     guestSessionValue = request.cookies.get('guest_session')
 
-    if guestId:
-        guest = await db.get(Guest, uuid.UUID(guestId))
-        if guest:
-            await dbQuick.delete_object_in_db(db, guest)
-    
     if guestSessionValue:
         guestSession = await db.scalar(select(GuestSession).where(GuestSession.value == uuid.UUID(guestSessionValue)))
         if guestSession:
-            await dbQuick.delete_object_in_db(db, guestSession)
+            await db.delete(guestSession)
+
+    if guestId:
+        guest = await db.get(Guest, uuid.UUID(guestId))
+        if guest:
+            await db.delete(guest)
+
+    await db.commit()
 
     response.delete_cookie(key="guest_session", path="/")
     response.delete_cookie(key="guest_id", path="/")
