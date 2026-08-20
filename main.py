@@ -56,6 +56,20 @@ async def create_guest(response: Response, db: AsyncSession = Depends(get_db)):
 
     return {"id": guest_id, "username": guest_username}
 
+@app.get("/guest", response_model=GuestSchema)
+async def get_guest(request: Request, db: AsyncSession = Depends(get_db)):
+    guestId = request.cookies.get('guest_id')
+
+    if not guestId:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    guest = await db.get(Guest, uuid.UUID(guestId))
+
+    if guest is None:
+        raise HTTPException(status_code=404)
+
+    return guest
+    
 
 #create a game session with a shared link
 @app.post("/gamesession")
