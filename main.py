@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database.database import get_db
 from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
 from schema.schema import ChessAction, UserSchema, GuestSchema
-from model.model import User, Guest, GuestSession, GameSession
+from model.model import User, Guest, GuestSession, GameSession, guest_game_session, user_game_session
 import asyncio
 import os
 
@@ -51,8 +51,8 @@ async def create_guest(response: Response, db: AsyncSession = Depends(get_db)):
         guest_id=guest_id
     )
     await dbQuick.add_object_in_db(db, guestSession)
-    cook.send_cookie_for_guest(response, "guest_session", sessionId)
-    cook.send_cookie_for_guest(response, "guest_id", guest_id)
+    cook.send_cookie(response, "guest_session", sessionId)
+    cook.send_cookie(response, "guest_id", guest_id)
 
     return {"id": guest_id, "username": guest_username}
 
@@ -69,6 +69,44 @@ async def get_guest(request: Request, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404)
 
     return guest
+
+@app.get("/infos")
+async def get_infos(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    guestId = request.cookies.get('guest_id')
+    userId = request.cookies.get('user_id')
+    gameSessionCookie = request.cookies.get('game_session')
+
+    #check if cookie exists but not in db, then delete cookie
+    if gameSessionCookie:
+        gameSession = await db.get(GameSession, uuid.UUID(gameSessionCookie))
+        if not gameSession:
+            response.delete_cookie(key="game_session", path="/")
+
+    if guestId:
+        guest_uuid = uuid.UUID(guestId)
+        result = await db.execute(
+            select(guest_game_session.c.game_session_id).where(guest_game_session.c.guest_id == guest_uuid)
+        )
+        guestGameSession = result.first()
+        if guestGameSession:
+            return {
+                "game_session": guestGameSession.game_session_id
+            }
+    
+    if userId:
+        user_uuid = uuid.UUID(userId)
+        result = await db.execute(
+            select(user_game_session.c.game_session_id).where(user_game_session.c.user_id == user_uuid)
+        )
+        userGameSession = result.first()
+        if userGameSession:
+            return {
+                "game_session": userGameSession.game_session_id
+            }
+
+    raise HTTPException(status_code=404, detail="Have no session")
+
+
     
 @app.post("/guest/disconnect")
 async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
@@ -94,7 +132,7 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
 
 #create a game session with a shared link
 @app.post("/gamesession")
-async def create_game_session(request: Request, db: AsyncSession = Depends(get_db)):
+async def create_game_session(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     #check if the player is a guest or a logged user
     guestId = request.cookies.get('guest_id')
     userId = request.cookies.get('user_id')
@@ -106,14 +144,33 @@ async def create_game_session(request: Request, db: AsyncSession = Depends(get_d
     game_session = GameSession(data=jsonable_encoder(data))
 
     if guestId:
-        guest = await db.get(Guest, uuid.UUID(guestId))
+        #check if guest have already a game session in db
+        guest_uuid = uuid.UUID(guestId)
+        guestGameSession = await db.execute(
+            select(guest_game_session.c.guest_id).where(guest_game_session.c.guest_id == guest_uuid)
+        )
+        if guestGameSession.first() is not None:
+            raise HTTPException(status_code=403, detail="Already have a game session")
+
+        guest = await db.get(Guest, guest_uuid)
         game_session.guests.append(guest)
 
     if userId:
-        user = await db.get(User, uuid.UUID(userId))
+        #check if user have already a game session in db
+        user_uuid = uuid.UUID(userId)
+        userGameSession = await db.execute(
+            select(user_game_session.c.user_id).where(user_game_session.c.user_id == user_uuid)
+        )
+        if userGameSession.first() is not None:
+            raise HTTPException(status_code=403, detail="Already have a game session")
+
+        user = await db.get(User, user_uuid)
         game_session.users.append(user)
 
     await dbQuick.add_object_in_db(db, game_session)
+
+    cook.send_cookie(response, "game_session", str(game_session.id))
+
 
     #id used to create a link to share with an other player
     return {"game_session": game_session.id}

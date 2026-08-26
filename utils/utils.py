@@ -36,7 +36,7 @@ class DbQuickActions:
 class Cookie:
 
     @staticmethod
-    def send_cookie_for_guest(response: Response, key: str, value: str) -> None:
+    def send_cookie(response: Response, key: str, value: str) -> None:
         expire_time = datetime.now(timezone.utc) + timedelta(hours=1)
         response.set_cookie(
             key=key,
