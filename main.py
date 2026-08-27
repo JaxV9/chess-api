@@ -130,7 +130,7 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
 
     return {"status": "ok"}
 
-#create a game session with a shared link
+#create a game session id
 @app.post("/gamesession")
 async def create_game_session(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     #check if the player is a guest or a logged user
@@ -176,45 +176,71 @@ async def create_game_session(request: Request, response: Response, db: AsyncSes
     return {"game_session": game_session.id}
 
 
-#join a game session as a invited player
+#join a game session as a guest player or a logged user, for player that don't have create the game session
 @app.post("/gamesession/join/{gameSessionId}")
-async def join_offline_game_session(request: Request, gameSessionId: str, db: AsyncSession = Depends(get_db)):
+async def join_game_session(request: Request, response: Response, gameSessionId: str, db: AsyncSession = Depends(get_db)):
 
     #check if the player is a guest
     guestId = request.cookies.get('guest_id')
-    if not guestId:
-        raise HTTPException(status_code=400)
+    userId = request.cookies.get('user_id')
+    session_uuid = uuid.UUID(gameSessionId)
+
+    if not guestId and not userId:
+        raise HTTPException(status_code=401)
 
     #check if the session you're tring to join exists
-    result = await db.execute(select(OfflineGameSession).where(OfflineGameSession.id == gameSessionId))
-    offlineGameSessionExists = result.scalars().first()
-    if offlineGameSessionExists is None:
+    gameSession = await db.get(GameSession, session_uuid)
+    if gameSession is None:
         raise HTTPException(status_code=404)
+
     
-    result = await db.execute(
-        select(GuestsGameOfflineSession).where(
-            GuestsGameOfflineSession.offline_game_session_id == gameSessionId
-        )
-    )
-    guestRows = result.scalars().all()
+    guest_rows = (await db.execute(
+        select(guest_game_session.c.guest_id).where(guest_game_session.c.game_session_id == session_uuid)
+    )).all()
+
+    user_rows = (await db.execute(
+        select(user_game_session.c.user_id).where(user_game_session.c.game_session_id == session_uuid)
+    )).all()
 
     #check if the session is already full or not
-    if len(guestRows) >= 2:
+    if len(guest_rows) + len(user_rows) >= 2:
         raise HTTPException(status_code=403)
     
     #check if the player is already in the session
-    currentPlayerIsIn = any(row.guest_id == uuid.UUID(guestId) for row in guestRows)
-    if currentPlayerIsIn:
-        raise HTTPException(status_code=403)
-    
-    #add the player in the offline game session
-    guestsOfflineSession = GuestsGameOfflineSession(
-        offline_game_session_id=gameSessionId,
-        guest_id=guestId
-    )
-    await dbQuick.add_object_in_db(db, guestsOfflineSession)
+    if guestId:
+        currentGuestInSession = await db.execute(
+            select(guest_game_session).where(
+                guest_game_session.c.guest_id == uuid.UUID(guestId)
+            )
+        )
+        if currentGuestInSession.first() is not None:
+            raise HTTPException(status_code=403)
 
-    return {"message": f"Joined game session with ID: {gameSessionId}"}
+        guestUuid = uuid.UUID(guestId)
+        guest = await db.get(Guest, guestUuid)
+        gameSession.guests.append(guest)
+        await db.commit()
+        cook.send_cookie(response, "game_session", str(gameSession.id))
+        return {"message": f"Joined game session with ID: {gameSessionId}"}
+
+
+    elif userId:
+        currentUserInSession = await db.execute(
+            select(user_game_session).where(
+                user_game_session.c.user_id == uuid.UUID(userId)
+            )
+        )
+        if currentUserInSession.first() is not None:
+            raise HTTPException(status_code=403)
+
+        userUuid = uuid.UUID(userId)
+        user = await db.get(User, userUuid)
+        gameSession.users.append(user)
+        await db.commit()
+        cook.send_cookie(response, "game_session", str(gameSession.id))
+        return {"message": f"Joined game session with ID: {gameSessionId}"}
+    
+    raise HTTPException(status_code=403)
 
         
 @app.websocket("/ws/chess/{gameSessionId}")
