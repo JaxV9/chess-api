@@ -193,7 +193,8 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
     if gameSession is None:
         raise HTTPException(status_code=404)
 
-    
+    await db.refresh(gameSession, ["guests", "users"])
+
     guest_rows = (await db.execute(
         select(guest_game_session.c.guest_id).where(guest_game_session.c.game_session_id == session_uuid)
     )).all()
@@ -204,7 +205,7 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
 
     #check if the session is already full or not
     if len(guest_rows) + len(user_rows) >= 2:
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=403, detail="a")
     
     #check if the player is already in the session
     if guestId:
@@ -214,14 +215,14 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
             )
         )
         if currentGuestInSession.first() is not None:
-            raise HTTPException(status_code=403)
+            raise HTTPException(status_code=403, detail="b")
 
         guestUuid = uuid.UUID(guestId)
         guest = await db.get(Guest, guestUuid)
         gameSession.guests.append(guest)
         await db.commit()
-        cook.send_cookie(response, "game_session", str(gameSession.id))
-        return {"message": f"Joined game session with ID: {gameSessionId}"}
+        cook.send_cookie(response, "game_session", gameSessionId)
+        return {"game_session": gameSessionId}
 
 
     elif userId:
@@ -231,16 +232,16 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
             )
         )
         if currentUserInSession.first() is not None:
-            raise HTTPException(status_code=403)
+            raise HTTPException(status_code=403, detail="c")
 
         userUuid = uuid.UUID(userId)
         user = await db.get(User, userUuid)
         gameSession.users.append(user)
         await db.commit()
-        cook.send_cookie(response, "game_session", str(gameSession.id))
-        return {"message": f"Joined game session with ID: {gameSessionId}"}
+        cook.send_cookie(response, "game_session", gameSessionId)
+        return {"game_session": gameSessionId}
     
-    raise HTTPException(status_code=403)
+    raise HTTPException(status_code=403, detail="d")
 
         
 @app.websocket("/ws/chess/{gameSessionId}")
