@@ -127,6 +127,7 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
 
     response.delete_cookie(key="guest_session", path="/")
     response.delete_cookie(key="guest_id", path="/")
+    response.delete_cookie(key="game_session", path="/")
 
     return {"status": "ok"}
 
