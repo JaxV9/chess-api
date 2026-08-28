@@ -1,3 +1,8 @@
+from database import database
+from database import database
+from database import database
+from database import database
+from database import database
 from constant.constant import data
 from fastapi.encoders import jsonable_encoder
 import json, uuid
@@ -23,7 +28,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-active_connections = set()
+active_connections: dict[str, set[WebSocket]] = {}
 
 #get all the users
 @app.get("/users", response_model=List[UserSchema])
@@ -248,7 +253,6 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
 @app.websocket("/ws/chess/{gameSessionId}")
 async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
-    active_connections.add(websocket)
 
     try:
         #Test if the uuid format is correct
@@ -258,32 +262,24 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
             await websocket.close(code=403)
             return
         
-        while True:
-            #check if the player is a guest
-            guestId = websocket.cookies.get('guest_id')
-            print("cookie", guestId)
+        gameSessionId = websocket.cookies.get('game_session')
 
-            result = await db.execute(
-                select(GuestsGameOfflineSession).where(
-                    GuestsGameOfflineSession.offline_game_session_id == gameSessionId
-                )
-            )
-            guestRows = result.scalars().all()
+        gameSession = await db.get(GameSession, uuid.UUID(gameSessionId))
 
-            #if the session doesn't exists close the websocket
-            if guestRows is None:
-                await websocket.send_text(json.dumps({"response": "Session not found"}))
-                await websocket.close(code=404)
-                return
-    
-            #wait a player if you're alone
-            if len(guestRows) == 2:
-                break
-            await websocket.send_text(json.dumps(jsonable_encoder({"response": "Waiting for a player"})))
-            await asyncio.sleep(2)
+        #if the session doesn't exists in db close the websocket
+        if gameSession is None:
+            await websocket.send_text(json.dumps({"response": "Session not found"}))
+            await websocket.close(code=404)
+            return
+
+        if gameSessionId not in active_connections:
+            active_connections[gameSessionId] = set()
+        
+        active_connections[gameSessionId].add(websocket)
 
         while True:
-            response = {"response": "ok", "data": data}
+            session_data = gameSession.data
+            response = {"response": "ok", "data": session_data}
             await websocket.send_text(json.dumps(jsonable_encoder(response)))
 
             #wait a message from client
@@ -294,17 +290,24 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
 
             if chessAction.action == "move":
                 for piece in chessAction.pieces:
-                    for data_piece in data:
-                        if data_piece.id == piece.id:
-                            data_piece.pos = piece.pos
+                    for data_piece in session_data:
+                        if data_piece["id"] == piece.id:
+                            data_piece["pos"] = piece.pos
                             break
+                gameSession.data = session_data
+                db.add(gameSession)
+                await db.commit()
+                await db.refresh(gameSession)
 
                 # Send updated data to all clients
-                for connection in active_connections:
-                    await connection.send_text(json.dumps(jsonable_encoder(response)))
+                for connection in list(active_connections.get(gameSessionId, set())):
+                    try:
+                        await connection.send_text(json.dumps(jsonable_encoder(response)))
+                    except Exception:
+                        active_connections[gameSessionId].discard(connection)
 
     except WebSocketDisconnect as e:
         print(f"Client disconnected: {e}")
-        active_connections.remove(websocket)
-    except Exception as e:
-        print(f"Client disconnected: {e}")
+        active_connections.get(gameSessionId, set()).discard(websocket)
+        if not active_connections.get(gameSessionId):
+            del active_connections[gameSessionId]
