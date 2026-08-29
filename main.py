@@ -279,6 +279,18 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
         response = {"response": "ok", "data": session_data}
         await websocket.send_text(json.dumps(jsonable_encoder(response)))
 
+        players = list(active_connections.get(gameSessionId, set()))
+
+        if len(players) == 1:
+            response = {"response": "ok", "data": session_data, "waiting_player": True }
+            await websocket.send_text(json.dumps(jsonable_encoder(response)))
+            
+        if len(players) == 2:
+            response = {"response": "ok", "data": session_data, "waiting_player": False}
+            for connection in players:
+                await connection.send_text(json.dumps(jsonable_encoder(response)))
+
+
         while True:
 
             #wait a message from client
