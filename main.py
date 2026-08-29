@@ -262,8 +262,6 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
             await websocket.close(code=403)
             return
         
-        gameSessionId = websocket.cookies.get('game_session')
-
         gameSession = await db.get(GameSession, uuid.UUID(gameSessionId))
 
         #if the session doesn't exists in db close the websocket
@@ -277,10 +275,11 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
         
         active_connections[gameSessionId].add(websocket)
 
+        session_data = gameSession.data
+        response = {"response": "ok", "data": session_data}
+        await websocket.send_text(json.dumps(jsonable_encoder(response)))
+
         while True:
-            session_data = gameSession.data
-            response = {"response": "ok", "data": session_data}
-            await websocket.send_text(json.dumps(jsonable_encoder(response)))
 
             #wait a message from client
             message = await websocket.receive_text()
