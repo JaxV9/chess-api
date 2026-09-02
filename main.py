@@ -8,7 +8,7 @@ from fastapi.encoders import jsonable_encoder
 import json, uuid
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, union_all
 from fastapi import FastAPI, WebSocket, Depends, Response, HTTPException, Request, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from database.database import get_db
@@ -276,26 +276,44 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
         active_connections[gameSessionId].add(websocket)
 
         session_data = gameSession.data
-        response = {"response": "ok", "data": session_data}
-        await websocket.send_text(json.dumps(jsonable_encoder(response)))
 
-        players = list(active_connections.get(gameSessionId, set()))
+        playersSessions = list(active_connections.get(gameSessionId, set()))
 
-        if len(players) == 1:
-            response = {"response": "ok", "data": session_data, "waiting_player": True }
+        response = {"response": "ok", "data": session_data }
+
+        playersQuery = union_all(
+            select(Guest.username)
+            .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
+            .where(guest_game_session.c.game_session_id == gameSession.id),
+
+            select(User.username)
+            .join(user_game_session, User.id == user_game_session.c.user_id)
+            .where(user_game_session.c.game_session_id == gameSession.id)
+        )
+
+        usernamesOfPlayers = (await db.execute(playersQuery)).scalars().all()
+
+        response["players"] = []
+
+        for username in usernamesOfPlayers:
+            response["players"].append({
+                "username" : username
+            })
+
+        if len(playersSessions) == 1:
+            response["waiting_player"] = True
             await websocket.send_text(json.dumps(jsonable_encoder(response)))
             
-        if len(players) == 2:
-            response = {"response": "ok", "data": session_data, "waiting_player": False}
-            for connection in players:
+        if len(playersSessions) == 2:
+            response["waiting_player"] = False
+            
+            for connection in playersSessions:
                 await connection.send_text(json.dumps(jsonable_encoder(response)))
-
 
         while True:
 
             #wait a message from client
             message = await websocket.receive_text()
-            print(f"Message reçu : {message}")
 
             chessAction = ChessAction.model_validate_json(message)
 
