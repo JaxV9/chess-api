@@ -2,7 +2,6 @@ from database import database
 from database import database
 from database import database
 from database import database
-from database import database
 from constant.constant import data
 from fastapi.encoders import jsonable_encoder
 import json, uuid
@@ -15,20 +14,21 @@ from database.database import get_db
 from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
 from schema.schema import ChessAction, UserSchema, GuestSchema
 from model.model import User, Guest, GuestSession, GameSession, guest_game_session, user_game_session
-import asyncio
 import os
+import random
 
 origins = [os.getenv("BASE_URL")]
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # ou ["*"] pour tout autoriser (pas conseillé en prod)
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 active_connections: dict[str, set[WebSocket]] = {}
+session_players: dict[str, dict[str, str]] = {}
 
 #get all the users
 @app.get("/users", response_model=List[UserSchema])
@@ -295,9 +295,21 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
 
         response["players"] = []
 
+        # colors assignment
+        if gameSessionId not in session_players:
+            session_players[gameSessionId] = {}
+
         for username in usernamesOfPlayers:
+            if username not in session_players[gameSessionId]:
+                if len(session_players[gameSessionId]) == 0:
+                    session_players[gameSessionId][username] = "white" if bool(random.getrandbits(1)) else "black"
+                else:
+                    first_color = next(iter(session_players[gameSessionId].values()))
+                    session_players[gameSessionId][username] = "black" if first_color == "white" else "white"
+
             response["players"].append({
-                "username" : username
+                "username": username,
+                "color": session_players[gameSessionId][username]
             })
 
         if len(playersSessions) == 1:
@@ -328,8 +340,15 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
                 await db.commit()
                 await db.refresh(gameSession)
 
+                response["players"] = [
+                    {"username": user, "color": color}
+                    for user, color in session_players[gameSessionId].items()
+                ]
+
                 # Send updated data to all clients
-                for connection in list(active_connections.get(gameSessionId, set())):
+                current_connections = list(active_connections.get(gameSessionId, set()))
+                response["waiting_player"] = len(current_connections) < 2
+                for connection in current_connections:
                     try:
                         await connection.send_text(json.dumps(jsonable_encoder(response)))
                     except Exception:
@@ -340,3 +359,4 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
         active_connections.get(gameSessionId, set()).discard(websocket)
         if not active_connections.get(gameSessionId):
             del active_connections[gameSessionId]
+            session_colors.pop(gameSessionId, None)

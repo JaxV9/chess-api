@@ -41,7 +41,7 @@ class Cookie:
         response.set_cookie(
             key=key,
             value=value,
-            max_age=3600,  # in seconds
+            max_age=10800,  # in seconds
             expires=expire_time,
             secure=False,
             httponly=True,
