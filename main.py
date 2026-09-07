@@ -328,6 +328,17 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
             message = await websocket.receive_text()
 
             chessAction = ChessAction.model_validate_json(message)
+            await db.refresh(gameSession)
+
+            session_data = gameSession.data
+
+            if len(session_data) > len(chessAction.pieces):
+                old_ids = { session["id"] for session in session_data }
+                new_ids = { piece.id for piece in chessAction.pieces }
+
+                captured_piece = old_ids - new_ids
+                session_data = [data_piece for data_piece in session_data if data_piece["id"] not in captured_piece]
+                        
 
             if chessAction.action == "move":
                 for piece in chessAction.pieces:
@@ -339,6 +350,7 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
                 db.add(gameSession)
                 await db.commit()
                 await db.refresh(gameSession)
+                response["data"] = session_data
 
                 response["players"] = [
                     {"username": user, "color": color}
@@ -359,4 +371,4 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
         active_connections.get(gameSessionId, set()).discard(websocket)
         if not active_connections.get(gameSessionId):
             del active_connections[gameSessionId]
-            session_colors.pop(gameSessionId, None)
+            session_players.pop(gameSessionId, None)
