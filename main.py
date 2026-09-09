@@ -9,6 +9,7 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, union_all
 from fastapi import FastAPI, WebSocket, Depends, Response, HTTPException, Request, WebSocketDisconnect
+from sqlalchemy.orm.attributes import flag_modified
 from fastapi.middleware.cors import CORSMiddleware
 from database.database import get_db
 from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
@@ -247,7 +248,7 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
         cook.send_cookie(response, "game_session", gameSessionId)
         return {"game_session": gameSessionId}
     
-    raise HTTPException(status_code=403, detail="d")
+    raise HTTPException(status_code=403, detail="")
 
         
 @app.websocket("/ws/chess/{gameSessionId}")
@@ -318,7 +319,17 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
             
         if len(playersSessions) == 2:
             response["waiting_player"] = False
-            
+            player_with_white_color = next(
+                (user for user, color in session_players[gameSessionId].items() if color == "white"),
+                None
+            )
+            if player_with_white_color is None:
+                return HTTPException(status_code=404)
+
+            if "user_to_play" not in session_players[gameSessionId]:
+                session_players[gameSessionId]["user_to_play"] = player_with_white_color
+
+            response["user_to_play"] = session_players[gameSessionId]["user_to_play"]
             for connection in playersSessions:
                 await connection.send_text(json.dumps(jsonable_encoder(response)))
 
@@ -347,6 +358,7 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
                             data_piece["pos"] = piece.pos
                             break
                 gameSession.data = session_data
+                flag_modified(gameSession, "data")
                 db.add(gameSession)
                 await db.commit()
                 await db.refresh(gameSession)
@@ -355,11 +367,31 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
                 response["players"] = [
                     {"username": user, "color": color}
                     for user, color in session_players[gameSessionId].items()
+                    if user != "user_to_play"
                 ]
 
                 # Send updated data to all clients
                 current_connections = list(active_connections.get(gameSessionId, set()))
                 response["waiting_player"] = len(current_connections) < 2
+
+                player_with_white_color = next(
+                    (user for user, color in session_players[gameSessionId].items() if color == "white"),
+                    None
+                )
+
+                player_with_black_color = next(
+                    (user for user, color in session_players[gameSessionId].items() if color == "black"),
+                    None
+                )
+
+                #change the turn of the user to play
+                if session_players[gameSessionId]["user_to_play"] == player_with_white_color:
+                    session_players[gameSessionId]["user_to_play"] = player_with_black_color
+                else:
+                    session_players[gameSessionId]["user_to_play"] = player_with_white_color
+
+                response["user_to_play"] = session_players[gameSessionId]["user_to_play"]
+
                 for connection in current_connections:
                     try:
                         await connection.send_text(json.dumps(jsonable_encoder(response)))
