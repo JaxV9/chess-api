@@ -1,7 +1,4 @@
 from database import database
-from database import database
-from database import database
-from database import database
 from constant.constant import data
 from fastapi.encoders import jsonable_encoder
 import json, uuid
