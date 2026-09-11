@@ -48,3 +48,13 @@ class Cookie:
             samesite="none",  # Required for cross-site cookies (frontend ↔ API on different Vercel domains)
             path="/", 
         )
+
+    @staticmethod
+    def delete_cookie(response: Response, key: str) -> None:
+        response.delete_cookie(
+            key=key,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="none",
+        )

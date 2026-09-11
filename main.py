@@ -93,7 +93,7 @@ async def get_infos(request: Request, response: Response, db: AsyncSession = Dep
     if gameSessionCookie:
         gameSession = await db.get(GameSession, uuid.UUID(gameSessionCookie))
         if not gameSession:
-            response.delete_cookie(key="game_session", path="/")
+            cook.delete_cookie(response, "game_session")
 
     if guestId:
         guest_uuid = uuid.UUID(guestId)
@@ -138,9 +138,9 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
 
     await db.commit()
 
-    response.delete_cookie(key="guest_session", path="/")
-    response.delete_cookie(key="guest_id", path="/")
-    response.delete_cookie(key="game_session", path="/")
+    cook.delete_cookie(response, "guest_session")
+    cook.delete_cookie(response, "guest_id")
+    cook.delete_cookie(response, "game_session")
 
     return {"status": "ok"}
 
