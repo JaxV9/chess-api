@@ -43,8 +43,8 @@ class Cookie:
             value=value,
             max_age=10800,  # in seconds
             expires=expire_time,
-            secure=False,
+            secure=True,
             httponly=True,
-            samesite="lax",  # "None" requires secure=True (HTTPS) — use lax for local dev
+            samesite="none",  # Required for cross-site cookies (frontend ↔ API on different Vercel domains)
             path="/", 
         )
