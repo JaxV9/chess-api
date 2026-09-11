@@ -15,12 +15,22 @@ from model.model import User, Guest, GuestSession, GameSession, guest_game_sessi
 import os
 import random
 
-origins = [os.getenv("BASE_URL")]
+base_url = (os.getenv("BASE_URL") or "").rstrip("/")
+
+origins = [
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+]
+
+if base_url:
+    origins.append(base_url)
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
