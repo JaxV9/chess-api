@@ -59,11 +59,11 @@ async def create_guest(response: Response, db: AsyncSession = Depends(get_db)):
 
     #Save the temp session of the guest and send a cookie
     sessionId = gen.guest_session_id()
-    guestSession = GuestSession(
+    guest_session = GuestSession(
         value=sessionId,
         guest_id=guest_id
     )
-    await dbQuick.add_object_in_db(db, guestSession)
+    await dbQuick.add_object_in_db(db, guest_session)
     cook.send_cookie(response, "guest_session", sessionId)
     cook.send_cookie(response, "guest_id", guest_id)
 
@@ -85,36 +85,36 @@ async def get_guest(request: Request, db: AsyncSession = Depends(get_db)):
 
 @app.get("/infos")
 async def get_infos(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
-    guestId = request.cookies.get('guest_id')
-    userId = request.cookies.get('user_id')
-    gameSessionCookie = request.cookies.get('game_session')
+    guest_id = request.cookies.get('guest_id')
+    user_id = request.cookies.get('user_id')
+    game_session_cookie = request.cookies.get('game_session')
 
     #check if cookie exists but not in db, then delete cookie
-    if gameSessionCookie:
-        gameSession = await db.get(GameSession, uuid.UUID(gameSessionCookie))
-        if not gameSession:
+    if game_session_cookie:
+        game_session = await db.get(GameSession, uuid.UUID(game_session_cookie))
+        if not game_session:
             cook.delete_cookie(response, "game_session")
 
-    if guestId:
-        guest_uuid = uuid.UUID(guestId)
+    if guest_id:
+        guest_uuid = uuid.UUID(guest_id)
         result = await db.execute(
             select(guest_game_session.c.game_session_id).where(guest_game_session.c.guest_id == guest_uuid)
         )
-        guestGameSession = result.first()
-        if guestGameSession:
+        guest_game_session_query = result.first()
+        if guest_game_session_query:
             return {
-                "game_session": guestGameSession.game_session_id
+                "game_session": guest_game_session_query.game_session_id
             }
     
-    if userId:
-        user_uuid = uuid.UUID(userId)
+    if user_id:
+        user_uuid = uuid.UUID(user_id)
         result = await db.execute(
             select(user_game_session.c.game_session_id).where(user_game_session.c.user_id == user_uuid)
         )
-        userGameSession = result.first()
-        if userGameSession:
+        user_game_session_query = result.first()
+        if user_game_session_query:
             return {
-                "game_session": userGameSession.game_session_id
+                "game_session": user_game_session_query.game_session_id
             }
 
     raise HTTPException(status_code=404, detail="Have no session")
@@ -124,10 +124,10 @@ async def get_infos(request: Request, response: Response, db: AsyncSession = Dep
 @app.post("/guest/disconnect")
 async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     guestId = request.cookies.get('guest_id')
-    guestSessionValue = request.cookies.get('guest_session')
+    guest_session_value = request.cookies.get('guest_session')
 
-    if guestSessionValue:
-        guestSession = await db.scalar(select(GuestSession).where(GuestSession.value == uuid.UUID(guestSessionValue)))
+    if guest_session_value:
+        guestSession = await db.scalar(select(GuestSession).where(GuestSession.value == uuid.UUID(guest_session_value)))
         if guestSession:
             await db.delete(guestSession)
 
@@ -148,34 +148,34 @@ async def disconnect_guest(request: Request, response: Response, db: AsyncSessio
 @app.post("/gamesession")
 async def create_game_session(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     #check if the player is a guest or a logged user
-    guestId = request.cookies.get('guest_id')
-    userId = request.cookies.get('user_id')
+    guest_id = request.cookies.get('guest_id')
+    user_id = request.cookies.get('user_id')
 
-    if not guestId and not userId:
+    if not guest_id and not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     # create game session object in ram memory
     game_session = GameSession(data=jsonable_encoder(data))
 
-    if guestId:
+    if guest_id:
         #check if guest have already a game session in db
-        guest_uuid = uuid.UUID(guestId)
-        guestGameSession = await db.execute(
+        guest_uuid = uuid.UUID(guest_id)
+        guest_game_session_query = await db.execute(
             select(guest_game_session.c.guest_id).where(guest_game_session.c.guest_id == guest_uuid)
         )
-        if guestGameSession.first() is not None:
+        if guest_game_session_query.first() is not None:
             raise HTTPException(status_code=403, detail="Already have a game session")
 
         guest = await db.get(Guest, guest_uuid)
         game_session.guests.append(guest)
 
-    if userId:
+    if user_id:
         #check if user have already a game session in db
-        user_uuid = uuid.UUID(userId)
-        userGameSession = await db.execute(
+        user_uuid = uuid.UUID(user_id)
+        user_game_session_query = await db.execute(
             select(user_game_session.c.user_id).where(user_game_session.c.user_id == user_uuid)
         )
-        if userGameSession.first() is not None:
+        if user_game_session_query.first() is not None:
             raise HTTPException(status_code=403, detail="Already have a game session")
 
         user = await db.get(User, user_uuid)
@@ -191,23 +191,23 @@ async def create_game_session(request: Request, response: Response, db: AsyncSes
 
 
 #join a game session as a guest player or a logged user, for player that don't have create the game session
-@app.post("/gamesession/join/{gameSessionId}")
-async def join_game_session(request: Request, response: Response, gameSessionId: str, db: AsyncSession = Depends(get_db)):
+@app.post("/gamesession/join/{game_session_id}")
+async def join_game_session(request: Request, response: Response, game_session_id: str, db: AsyncSession = Depends(get_db)):
 
     #check if the player is a guest
-    guestId = request.cookies.get('guest_id')
-    userId = request.cookies.get('user_id')
-    session_uuid = uuid.UUID(gameSessionId)
+    guest_id = request.cookies.get('guest_id')
+    user_id = request.cookies.get('user_id')
+    session_uuid = uuid.UUID(game_session_id)
 
-    if not guestId and not userId:
+    if not guest_id and not user_id:
         raise HTTPException(status_code=401)
 
     #check if the session you're tring to join exists
-    gameSession = await db.get(GameSession, session_uuid)
-    if gameSession is None:
+    game_session = await db.get(GameSession, session_uuid)
+    if game_session is None:
         raise HTTPException(status_code=404)
 
-    await db.refresh(gameSession, ["guests", "users"])
+    await db.refresh(game_session, ["guests", "users"])
 
     guest_rows = (await db.execute(
         select(guest_game_session.c.guest_id).where(guest_game_session.c.game_session_id == session_uuid)
@@ -222,122 +222,122 @@ async def join_game_session(request: Request, response: Response, gameSessionId:
         raise HTTPException(status_code=403, detail="a")
     
     #check if the player is already in the session
-    if guestId:
-        currentGuestInSession = await db.execute(
+    if guest_id:
+        current_guest_in_session = await db.execute(
             select(guest_game_session).where(
-                guest_game_session.c.guest_id == uuid.UUID(guestId)
+                guest_game_session.c.guest_id == uuid.UUID(guest_id)
             )
         )
-        if currentGuestInSession.first() is not None:
+        if current_guest_in_session.first() is not None:
             raise HTTPException(status_code=403, detail="b")
 
-        guestUuid = uuid.UUID(guestId)
-        guest = await db.get(Guest, guestUuid)
-        gameSession.guests.append(guest)
+        guest_uuid = uuid.UUID(guest_id)
+        guest = await db.get(Guest, guest_uuid)
+        game_session.guests.append(guest)
         await db.commit()
-        cook.send_cookie(response, "game_session", gameSessionId)
-        return {"game_session": gameSessionId}
+        cook.send_cookie(response, "game_session", game_session_id)
+        return {"game_session": game_session_id}
 
 
-    elif userId:
+    elif user_id:
         currentUserInSession = await db.execute(
             select(user_game_session).where(
-                user_game_session.c.user_id == uuid.UUID(userId)
+                user_game_session.c.user_id == uuid.UUID(user_id)
             )
         )
         if currentUserInSession.first() is not None:
             raise HTTPException(status_code=403, detail="c")
 
-        userUuid = uuid.UUID(userId)
+        userUuid = uuid.UUID(user_id)
         user = await db.get(User, userUuid)
-        gameSession.users.append(user)
+        game_session.users.append(user)
         await db.commit()
-        cook.send_cookie(response, "game_session", gameSessionId)
-        return {"game_session": gameSessionId}
+        cook.send_cookie(response, "game_session", game_session_id)
+        return {"game_session": game_session_id}
     
     raise HTTPException(status_code=403, detail="")
 
         
-@app.websocket("/ws/chess/{gameSessionId}")
-async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: AsyncSession = Depends(get_db)):
+@app.websocket("/ws/chess/{game_session_id}")
+async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: AsyncSession = Depends(get_db)):
     await websocket.accept()
 
     try:
         #Test if the uuid format is correct
         try:
-            uuid.UUID(gameSessionId)
+            uuid.UUID(game_session_id)
         except ValueError:
             await websocket.close(code=403)
             return
         
-        gameSession = await db.get(GameSession, uuid.UUID(gameSessionId))
+        game_session = await db.get(GameSession, uuid.UUID(game_session_id))
 
         #if the session doesn't exists in db close the websocket
-        if gameSession is None:
+        if game_session is None:
             await websocket.send_text(json.dumps({"response": "Session not found"}))
             await websocket.close(code=404)
             return
 
-        if gameSessionId not in active_connections:
-            active_connections[gameSessionId] = set()
+        if game_session_id not in active_connections:
+            active_connections[game_session_id] = set()
         
-        active_connections[gameSessionId].add(websocket)
+        active_connections[game_session_id].add(websocket)
 
-        session_data = gameSession.data
+        session_data = game_session.data
 
-        playersSessions = list(active_connections.get(gameSessionId, set()))
+        players_sessions = list(active_connections.get(game_session_id, set()))
 
         response = {"response": "ok", "data": session_data }
 
-        playersQuery = union_all(
+        players_query = union_all(
             select(Guest.username)
             .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
-            .where(guest_game_session.c.game_session_id == gameSession.id),
+            .where(guest_game_session.c.game_session_id == game_session.id),
 
             select(User.username)
             .join(user_game_session, User.id == user_game_session.c.user_id)
-            .where(user_game_session.c.game_session_id == gameSession.id)
+            .where(user_game_session.c.game_session_id == game_session.id)
         )
 
-        usernamesOfPlayers = (await db.execute(playersQuery)).scalars().all()
+        usernames_of_players = (await db.execute(players_query)).scalars().all()
 
         response["players"] = []
 
         # colors assignment
-        if gameSessionId not in session_players:
-            session_players[gameSessionId] = {}
+        if game_session_id not in session_players:
+            session_players[game_session_id] = {}
 
-        for username in usernamesOfPlayers:
-            if username not in session_players[gameSessionId]:
-                if len(session_players[gameSessionId]) == 0:
-                    session_players[gameSessionId][username] = "white" if bool(random.getrandbits(1)) else "black"
+        for username in usernames_of_players:
+            if username not in session_players[game_session_id]:
+                if len(session_players[game_session_id]) == 0:
+                    session_players[game_session_id][username] = "white" if bool(random.getrandbits(1)) else "black"
                 else:
-                    first_color = next(iter(session_players[gameSessionId].values()))
-                    session_players[gameSessionId][username] = "black" if first_color == "white" else "white"
+                    first_color = next(iter(session_players[game_session_id].values()))
+                    session_players[game_session_id][username] = "black" if first_color == "white" else "white"
 
             response["players"].append({
                 "username": username,
-                "color": session_players[gameSessionId][username]
+                "color": session_players[game_session_id][username]
             })
 
-        if len(playersSessions) == 1:
+        if len(players_sessions) == 1:
             response["waiting_player"] = True
             await websocket.send_text(json.dumps(jsonable_encoder(response)))
             
-        if len(playersSessions) == 2:
+        if len(players_sessions) == 2:
             response["waiting_player"] = False
             player_with_white_color = next(
-                (user for user, color in session_players[gameSessionId].items() if color == "white"),
+                (user for user, color in session_players[game_session_id].items() if color == "white"),
                 None
             )
             if player_with_white_color is None:
                 return HTTPException(status_code=404)
 
-            if "user_to_play" not in session_players[gameSessionId]:
-                session_players[gameSessionId]["user_to_play"] = player_with_white_color
+            if "user_to_play" not in session_players[game_session_id]:
+                session_players[game_session_id]["user_to_play"] = player_with_white_color
 
-            response["user_to_play"] = session_players[gameSessionId]["user_to_play"]
-            for connection in playersSessions:
+            response["user_to_play"] = session_players[game_session_id]["user_to_play"]
+            for connection in players_sessions:
                 await connection.send_text(json.dumps(jsonable_encoder(response)))
 
         while True:
@@ -346,9 +346,9 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
             message = await websocket.receive_text()
 
             chessAction = ChessAction.model_validate_json(message)
-            await db.refresh(gameSession)
+            await db.refresh(game_session)
 
-            session_data = gameSession.data
+            session_data = game_session.data
 
             if len(session_data) > len(chessAction.pieces):
                 old_ids = { session["id"] for session in session_data }
@@ -364,50 +364,50 @@ async def websocket_endpoint(websocket: WebSocket, gameSessionId: str, db: Async
                         if data_piece["id"] == piece.id:
                             data_piece["pos"] = piece.pos
                             break
-                gameSession.data = session_data
-                flag_modified(gameSession, "data")
-                db.add(gameSession)
+                game_session.data = session_data
+                flag_modified(game_session, "data")
+                db.add(game_session)
                 await db.commit()
-                await db.refresh(gameSession)
+                await db.refresh(game_session)
                 response["data"] = session_data
 
                 response["players"] = [
                     {"username": user, "color": color}
-                    for user, color in session_players[gameSessionId].items()
+                    for user, color in session_players[game_session_id].items()
                     if user != "user_to_play"
                 ]
 
                 # Send updated data to all clients
-                current_connections = list(active_connections.get(gameSessionId, set()))
+                current_connections = list(active_connections.get(game_session_id, set()))
                 response["waiting_player"] = len(current_connections) < 2
 
                 player_with_white_color = next(
-                    (user for user, color in session_players[gameSessionId].items() if color == "white"),
+                    (user for user, color in session_players[game_session_id].items() if color == "white"),
                     None
                 )
 
                 player_with_black_color = next(
-                    (user for user, color in session_players[gameSessionId].items() if color == "black"),
+                    (user for user, color in session_players[game_session_id].items() if color == "black"),
                     None
                 )
 
                 #change the turn of the user to play
-                if session_players[gameSessionId]["user_to_play"] == player_with_white_color:
-                    session_players[gameSessionId]["user_to_play"] = player_with_black_color
+                if session_players[game_session_id]["user_to_play"] == player_with_white_color:
+                    session_players[game_session_id]["user_to_play"] = player_with_black_color
                 else:
-                    session_players[gameSessionId]["user_to_play"] = player_with_white_color
+                    session_players[game_session_id]["user_to_play"] = player_with_white_color
 
-                response["user_to_play"] = session_players[gameSessionId]["user_to_play"]
+                response["user_to_play"] = session_players[game_session_id]["user_to_play"]
 
                 for connection in current_connections:
                     try:
                         await connection.send_text(json.dumps(jsonable_encoder(response)))
                     except Exception:
-                        active_connections[gameSessionId].discard(connection)
+                        active_connections[game_session_id].discard(connection)
 
     except WebSocketDisconnect as e:
         print(f"Client disconnected: {e}")
-        active_connections.get(gameSessionId, set()).discard(websocket)
-        if not active_connections.get(gameSessionId):
-            del active_connections[gameSessionId]
-            session_players.pop(gameSessionId, None)
+        active_connections.get(game_session_id, set()).discard(websocket)
+        if not active_connections.get(game_session_id):
+            del active_connections[game_session_id]
+            session_players.pop(game_session_id, None)
