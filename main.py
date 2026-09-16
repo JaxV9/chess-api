@@ -155,7 +155,7 @@ async def create_game_session(request: Request, response: Response, db: AsyncSes
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     # create game session object in ram memory
-    game_session = GameSession(data=jsonable_encoder(data))
+    game_session = GameSession(data=jsonable_encoder(data), history=[])
 
     if guest_id:
         #check if guest have already a game session in db
@@ -362,6 +362,14 @@ async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: Asy
                 for piece in chessAction.pieces:
                     for data_piece in session_data:
                         if data_piece["id"] == piece.id:
+                            if data_piece["pos"] != piece.pos:
+                                current_history = game_session.history or []
+                                game_session.history = [*current_history, {
+                                    "piece_id": piece.id,
+                                    "from": data_piece["pos"],
+                                    "to": piece.pos
+                                }]
+                                flag_modified(game_session, "history")
                             data_piece["pos"] = piece.pos
                             break
                 game_session.data = session_data
@@ -370,6 +378,7 @@ async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: Asy
                 await db.commit()
                 await db.refresh(game_session)
                 response["data"] = session_data
+                response["history"] = game_session.history
 
                 response["players"] = [
                     {"username": user, "color": color}

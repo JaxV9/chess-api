@@ -82,6 +82,7 @@ class GameSession(Base):
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True, unique=True)
     data: Mapped[dict] = mapped_column(JSON)
+    history: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
     created_at: Mapped[DateTime] = mapped_column(DateTime, index=True, server_default=func.now())
     time: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, index=True, nullable=True)
 
