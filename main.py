@@ -152,6 +152,9 @@ async def quit_game(request: Request, response: Response, db: AsyncSession = Dep
     
 @app.post("/guest/disconnect")
 async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    
+    await quit_game(request, response, db)
+    
     guestId = request.cookies.get('guest_id')
     guest_session_value = request.cookies.get('guest_session')
 
