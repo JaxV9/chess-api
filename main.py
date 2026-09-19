@@ -120,6 +120,35 @@ async def get_infos(request: Request, response: Response, db: AsyncSession = Dep
     raise HTTPException(status_code=404, detail="Have no session")
 
 
+@app.post("/quitgame")
+async def quit_game(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    game_session_value = request.cookies.get('game_session')
+
+    if game_session_value:
+
+        connections = active_connections.get(game_session_value, set()).copy()
+        for ws in connections:
+            try:
+                await ws.send_text(json.dumps({
+                    "response": "opponent_quit",
+                }))
+                await ws.close()
+            except Exception:
+                pass
+
+        active_connections.pop(game_session_value, None)
+        session_players.pop(game_session_value, None)
+
+
+        game_session = await db.get(GameSession, uuid.UUID(game_session_value))
+        if game_session:
+            await db.delete(game_session)
+            await db.commit()
+
+    cook.delete_cookie(response, "game_session")
+
+    return {"status": "ok"}
+
     
 @app.post("/guest/disconnect")
 async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
