@@ -1,7 +1,7 @@
 from database import database
 from constant.constant import data
 from fastapi.encoders import jsonable_encoder
-import json, uuid
+import json, uuid, asyncio
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, union_all
@@ -302,29 +302,37 @@ async def websocket_endpoint(websocket: WebSocket, game_session_id: str):
             await websocket.close(code=403)
             return
 
-        async with AsyncSessionLocal() as db:
-            game_session = await db.get(GameSession, session_uuid)
+        game_session = None
+        usernames_of_players = []
+        session_data = None
+        session_history = None
 
-            # if the session doesn't exists in db close the websocket
-            if game_session is None:
-                await websocket.send_text(json.dumps({"response": "Session not found"}))
-                await websocket.close(code=404)
-                return
+        for _ in range(5):
+            async with AsyncSessionLocal() as db:
+                game_session = await db.get(GameSession, session_uuid)
+                if game_session is not None:
+                    session_data = game_session.data
+                    session_history = game_session.history
 
-            session_data = game_session.data
-            session_history = game_session.history
+                    players_query = union_all(
+                        select(Guest.username)
+                        .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
+                        .where(guest_game_session.c.game_session_id == session_uuid),
 
-            players_query = union_all(
-                select(Guest.username)
-                .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
-                .where(guest_game_session.c.game_session_id == session_uuid),
+                        select(User.username)
+                        .join(user_game_session, User.id == user_game_session.c.user_id)
+                        .where(user_game_session.c.game_session_id == session_uuid)
+                    )
 
-                select(User.username)
-                .join(user_game_session, User.id == user_game_session.c.user_id)
-                .where(user_game_session.c.game_session_id == session_uuid)
-            )
+                    usernames_of_players = (await db.execute(players_query)).scalars().all()
+                    break
+            await asyncio.sleep(0.4)
 
-            usernames_of_players = (await db.execute(players_query)).scalars().all()
+        # if the session doesn't exists in db close the websocket
+        if game_session is None:
+            await websocket.send_text(json.dumps({"response": "Session not found"}))
+            await websocket.close(code=404)
+            return
 
         if game_session_id not in active_connections:
             active_connections[game_session_id] = set()
