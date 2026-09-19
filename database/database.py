@@ -18,7 +18,7 @@ else:
     DATABASE_URL = raw_url
 
 # Create the async engine
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=True, pool_pre_ping=True)
 
 # Async session factory
 AsyncSessionLocal = sessionmaker(
@@ -26,6 +26,7 @@ AsyncSessionLocal = sessionmaker(
     class_=AsyncSession,
     autocommit=False,
     autoflush=False,
+    expire_on_commit=False,
 )
 
 Base = declarative_base()

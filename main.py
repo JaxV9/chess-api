@@ -8,7 +8,7 @@ from sqlalchemy import select, union_all
 from fastapi import FastAPI, WebSocket, Depends, Response, HTTPException, Request, WebSocketDisconnect
 from sqlalchemy.orm.attributes import flag_modified
 from fastapi.middleware.cors import CORSMiddleware
-from database.database import get_db
+from database.database import get_db, AsyncSessionLocal
 from utils.utils import Generator as gen, DbQuickActions as dbQuick, Cookie as cook
 from schema.schema import ChessAction, UserSchema, GuestSchema
 from model.model import User, Guest, GuestSession, GameSession, guest_game_session, user_game_session
@@ -259,47 +259,49 @@ async def join_game_session(request: Request, response: Response, game_session_i
 
         
 @app.websocket("/ws/chess/{game_session_id}")
-async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: AsyncSession = Depends(get_db)):
+async def websocket_endpoint(websocket: WebSocket, game_session_id: str):
     await websocket.accept()
 
     try:
-        #Test if the uuid format is correct
+        # Test if the uuid format is correct
         try:
-            uuid.UUID(game_session_id)
+            session_uuid = uuid.UUID(game_session_id)
         except ValueError:
             await websocket.close(code=403)
             return
-        
-        game_session = await db.get(GameSession, uuid.UUID(game_session_id))
 
-        #if the session doesn't exists in db close the websocket
-        if game_session is None:
-            await websocket.send_text(json.dumps({"response": "Session not found"}))
-            await websocket.close(code=404)
-            return
+        async with AsyncSessionLocal() as db:
+            game_session = await db.get(GameSession, session_uuid)
+
+            # if the session doesn't exists in db close the websocket
+            if game_session is None:
+                await websocket.send_text(json.dumps({"response": "Session not found"}))
+                await websocket.close(code=404)
+                return
+
+            session_data = game_session.data
+            session_history = game_session.history
+
+            players_query = union_all(
+                select(Guest.username)
+                .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
+                .where(guest_game_session.c.game_session_id == session_uuid),
+
+                select(User.username)
+                .join(user_game_session, User.id == user_game_session.c.user_id)
+                .where(user_game_session.c.game_session_id == session_uuid)
+            )
+
+            usernames_of_players = (await db.execute(players_query)).scalars().all()
 
         if game_session_id not in active_connections:
             active_connections[game_session_id] = set()
         
         active_connections[game_session_id].add(websocket)
 
-        session_data = game_session.data
-
         players_sessions = list(active_connections.get(game_session_id, set()))
 
-        response = {"response": "ok", "data": session_data }
-
-        players_query = union_all(
-            select(Guest.username)
-            .join(guest_game_session, Guest.id == guest_game_session.c.guest_id)
-            .where(guest_game_session.c.game_session_id == game_session.id),
-
-            select(User.username)
-            .join(user_game_session, User.id == user_game_session.c.user_id)
-            .where(user_game_session.c.game_session_id == game_session.id)
-        )
-
-        usernames_of_players = (await db.execute(players_query)).scalars().all()
+        response = {"response": "ok", "data": session_data, "history": session_history}
 
         response["players"] = []
 
@@ -342,43 +344,48 @@ async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: Asy
 
         while True:
 
-            #wait a message from client
+            # wait a message from client
             message = await websocket.receive_text()
 
             chessAction = ChessAction.model_validate_json(message)
-            await db.refresh(game_session)
 
-            session_data = game_session.data
+            async with AsyncSessionLocal() as db:
+                game_session = await db.get(GameSession, session_uuid)
+                if game_session is None:
+                    continue
 
-            if len(session_data) > len(chessAction.pieces):
-                old_ids = { session["id"] for session in session_data }
-                new_ids = { piece.id for piece in chessAction.pieces }
+                session_data = game_session.data
 
-                captured_piece = old_ids - new_ids
-                session_data = [data_piece for data_piece in session_data if data_piece["id"] not in captured_piece]
-                        
+                if len(session_data) > len(chessAction.pieces):
+                    old_ids = { session["id"] for session in session_data }
+                    new_ids = { piece.id for piece in chessAction.pieces }
+
+                    captured_piece = old_ids - new_ids
+                    session_data = [data_piece for data_piece in session_data if data_piece["id"] not in captured_piece]
+
+                if chessAction.action == "move":
+                    for piece in chessAction.pieces:
+                        for data_piece in session_data:
+                            if data_piece["id"] == piece.id:
+                                if data_piece["pos"] != piece.pos:
+                                    current_history = game_session.history or []
+                                    game_session.history = [*current_history, {
+                                        "piece_id": piece.id,
+                                        "from": data_piece["pos"],
+                                        "to": piece.pos
+                                    }]
+                                    flag_modified(game_session, "history")
+                                data_piece["pos"] = piece.pos
+                                break
+                    game_session.data = session_data
+                    flag_modified(game_session, "data")
+                    db.add(game_session)
+                    await db.commit()
+                    updated_history = game_session.history
 
             if chessAction.action == "move":
-                for piece in chessAction.pieces:
-                    for data_piece in session_data:
-                        if data_piece["id"] == piece.id:
-                            if data_piece["pos"] != piece.pos:
-                                current_history = game_session.history or []
-                                game_session.history = [*current_history, {
-                                    "piece_id": piece.id,
-                                    "from": data_piece["pos"],
-                                    "to": piece.pos
-                                }]
-                                flag_modified(game_session, "history")
-                            data_piece["pos"] = piece.pos
-                            break
-                game_session.data = session_data
-                flag_modified(game_session, "data")
-                db.add(game_session)
-                await db.commit()
-                await db.refresh(game_session)
                 response["data"] = session_data
-                response["history"] = game_session.history
+                response["history"] = updated_history
 
                 response["players"] = [
                     {"username": user, "color": color}
@@ -400,7 +407,7 @@ async def websocket_endpoint(websocket: WebSocket, game_session_id: str, db: Asy
                     None
                 )
 
-                #change the turn of the user to play
+                # change the turn of the user to play
                 if session_players[game_session_id]["user_to_play"] == player_with_white_color:
                     session_players[game_session_id]["user_to_play"] = player_with_black_color
                 else:
