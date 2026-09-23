@@ -152,11 +152,34 @@ async def quit_game(request: Request, response: Response, db: AsyncSession = Dep
     
 @app.post("/guest/disconnect")
 async def disconnect_guest(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
-    
-    await quit_game(request, response, db)
-    
+
     guestId = request.cookies.get('guest_id')
     guest_session_value = request.cookies.get('guest_session')
+
+    if guestId:
+        guest_uuid = uuid.UUID(guestId)
+        game_session_result = await db.execute(
+            select(guest_game_session.c.game_session_id).where(guest_game_session.c.guest_id == guest_uuid)
+        )
+        game_session_row = game_session_result.first()
+        if game_session_row:
+            game_session_id_str = str(game_session_row.game_session_id)
+            connections = active_connections.get(game_session_id_str, set()).copy()
+            for ws in connections:
+                try:
+                    await ws.send_text(json.dumps({"response": "opponent_quit"}))
+                    await ws.close()
+                except Exception:
+                    pass
+            active_connections.pop(game_session_id_str, None)
+            session_players.pop(game_session_id_str, None)
+
+            game_session_obj = await db.get(GameSession, game_session_row.game_session_id)
+            if game_session_obj:
+                await db.delete(game_session_obj)
+                await db.commit()
+
+    cook.delete_cookie(response, "game_session")
 
     if guest_session_value:
         guestSession = await db.scalar(select(GuestSession).where(GuestSession.value == uuid.UUID(guest_session_value)))
